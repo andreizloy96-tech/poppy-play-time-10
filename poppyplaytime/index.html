@@ -251,7 +251,22 @@
         // --- Сокет обработчики ---
         function setupSocket(){
             socket.on('player_id',id=>playerId=id);
-            socket.on('players_update',(upd)=>{ players=upd; if(playerId && players[playerId]){ myPlayer=players[playerId]; localItems=myPlayer.items||0; hasGun=myPlayer.hasGun||false; localAmmo=myPlayer.ammo||0; updateUI(); } updatePlayersList(); updateUI(); });
+            socket.on('players_update', (upd) => {
+    players = upd;
+    if (playerId && players[playerId]) {
+        myPlayer = players[playerId];
+        // Если локальная позиция ещё не установлена, берём с сервера
+        if (playerPosition.x === 0 && playerPosition.z === 0) {
+            playerPosition = { ...myPlayer.position };
+        }
+        localItems = myPlayer.items || 0;
+        hasGun = myPlayer.hasGun || false;
+        localAmmo = myPlayer.ammo || 0;
+        updateUI();
+    }
+    updatePlayersList();
+    updateUI();
+});
             socket.on('game_state',(state)=>{ gameState=state; if(state==='playing') showNotification('⚡ Игра началась! Собирайте ключи и стреляйте в Прототипа!',false); else if(state==='game_over') showNotification('Игра окончена',true); updateUI(); });
             socket.on('monster_state',(st)=>{ monsterState=st; updateMonsterModel(); updateUI(); });
             socket.on('items_update',(it)=>{ items=it; updateItemModels(); });
@@ -418,7 +433,25 @@
         window.addEventListener('keyup', handleKeyUp);
         window.addEventListener('mousemove', handleMouseMove);
         // Запрос pointer lock при клике
-        document.body.addEventListener('click', () => { if(isGameActive) renderer.domElement.requestPointerLock(); });
+        // Захват курсора при клике на канвас (не на весь body)
+renderer.domElement.addEventListener('click', () => {
+    if (isGameActive && renderer.domElement.requestPointerLock) {
+        renderer.domElement.requestPointerLock();
+    }
+});
+// Скрываем курсор при захвате
+document.addEventListener('pointerlockchange', lockChange);
+document.addEventListener('mozpointerlockchange', lockChange);
+function lockChange() {
+    if (document.pointerLockElement === renderer.domElement) {
+        // Курсор захвачен – скрываем стандартный курсор
+        document.body.style.cursor = 'none';
+        console.log('Курсор захвачен, управление активно');
+    } else {
+        document.body.style.cursor = 'auto';
+        console.log('Курсор отпущен');
+    }
+}
     </script>
 </body>
 </html>
