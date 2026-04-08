@@ -163,10 +163,13 @@
             socket.on('player_moved',(data)=>{ if(players[data.playerId]){ players[data.playerId].position=data.position; players[data.playerId].rotation=data.rotation; let mesh=playerMeshes[data.playerId]; if(mesh) mesh.position.set(data.position.x,0,data.position.z), mesh.rotation.y=data.rotation; else{ mesh=createPlayerModel(data.position.x,data.position.z); scene.add(mesh); playerMeshes[data.playerId]=mesh; } } });
         }
         
-        // --- Управление и движение ---
+        // --- Управление и движение (ИСПРАВЛЕНО: W - вперёд, S - назад) ---
         function handleKeyDown(e){
             const k=e.key.toLowerCase();
-            if(k==='w') keys.w=true; if(k==='s') keys.s=true; if(k==='a') keys.a=true; if(k==='d') keys.d=true;
+            if(k==='w') keys.w=true; 
+            if(k==='s') keys.s=true; 
+            if(k==='a') keys.a=true; 
+            if(k==='d') keys.d=true;
             if(k==='e' && gameState==='playing'){
                 if(nearestItemId!==null) socket.emit('collect_item',nearestItemId);
                 else if(nearestWeapon) socket.emit('pickup_weapon');
@@ -176,13 +179,39 @@
         }
         function handleKeyUp(e){ const k=e.key.toLowerCase(); if(k==='w') keys.w=false; if(k==='s') keys.s=false; if(k==='a') keys.a=false; if(k==='d') keys.d=false; }
         function handleMouseMove(e){ if(!isGameActive) return; mouseX+=e.movementX*0.002; mouseY+=e.movementY*0.002; mouseY=Math.min(Math.max(mouseY,-Math.PI/2.2),Math.PI/2.2); }
+        
         function updateMovement(delta){
             if(!isGameActive) return;
-            let mx=0,mz=0; if(keys.w) mz-=1; if(keys.s) mz+=1; if(keys.a) mx-=1; if(keys.d) mx+=1;
-            if(mx!==0||mz!==0){ const len=Math.hypot(mx,mz); mx/=len; mz/=len; const spd=PLAYER_SPEED*delta; let nx=playerPosition.x+mx*spd, nz=playerPosition.z+mz*spd; const lim=MAP_SIZE-1.5; nx=Math.min(lim,Math.max(-lim,nx)); nz=Math.min(lim,Math.max(-lim,nz)); playerPosition.x=nx; playerPosition.z=nz; }
-            playerRotationY=mouseX;
+            let moveX = 0, moveZ = 0;
+            if (keys.w) moveZ -= 1;   // W - вперёд
+            if (keys.s) moveZ += 1;   // S - назад
+            if (keys.a) moveX -= 1;
+            if (keys.d) moveX += 1;
+            
+            if (moveX !== 0 || moveZ !== 0) {
+                const len = Math.hypot(moveX, moveZ);
+                moveX /= len;
+                moveZ /= len;
+                // Движение относительно направления камеры (от первого лица)
+                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+                let deltaX = (moveX * right.x + moveZ * forward.x) * PLAYER_SPEED * delta;
+                let deltaZ = (moveX * right.z + moveZ * forward.z) * PLAYER_SPEED * delta;
+                let newX = playerPosition.x + deltaX;
+                let newZ = playerPosition.z + deltaZ;
+                const limit = MAP_SIZE - 1.5;
+                newX = Math.min(limit, Math.max(-limit, newX));
+                newZ = Math.min(limit, Math.max(-limit, newZ));
+                playerPosition.x = newX;
+                playerPosition.z = newZ;
+            }
+            playerRotationY = mouseX;
             if(socket && playerId) socket.emit('player_move',{position:playerPosition,rotation:playerRotationY});
-            camera.rotation.order='YXZ'; camera.rotation.y=mouseX; camera.rotation.x=mouseY; camera.position.set(playerPosition.x,1.6,playerPosition.z);
+            camera.rotation.order='YXZ'; 
+            camera.rotation.y = mouseX; 
+            camera.rotation.x = mouseY; 
+            camera.position.set(playerPosition.x, 1.6, playerPosition.z);
+            
             // Подсказки
             nearestItemId=null; nearestWeapon=false;
             if(gameState==='playing'){
@@ -216,7 +245,7 @@
         }
         function updatePlayerModel(id){ const p=players[id]; if(!p) return; let m=playerMeshes[id]; if(!m){ m=createPlayerModel(p.position.x,p.position.z); scene.add(m); playerMeshes[id]=m; } m.position.set(p.position.x,0,p.position.z); m.rotation.y=p.rotation||0; }
         
-        // --- Обработчик кнопки "ВОЙТИ" с защитой от undefined ---
+        // --- Обработчик кнопки "ВОЙТИ" ---
         joinBtn.onclick = () => {
             const name = playerNameInput.value.trim();
             if(name) playerName = name;
@@ -226,8 +255,8 @@
                 socket.emit('change_name', playerName);
                 isGameActive = true;
                 lobbyScreen.style.display = 'none';
-                showNotification('Подключено! Ждите начала игры...', false);
-                setupSocket(); // все остальные обработчики
+                showNotification('Подключено! Нажмите "ГОТОВ" чтобы начать', false);
+                setupSocket();
             });
             socket.on('connect_error', (err) => {
                 console.error('Ошибка подключения:', err);
@@ -238,8 +267,12 @@
         readyBtn.onclick = () => { if(gameState==='waiting' && socket){ isPlayerReady=!isPlayerReady; socket.emit('player_ready',isPlayerReady); updateUI(); } };
         chatSendBtn.onclick = () => { const msg=chatInput.value.trim(); if(msg && socket) socket.emit('chat_message',msg), chatInput.value=''; };
         chatInput.onkeypress = e => { if(e.key==='Enter') chatSendBtn.click(); };
-        window.addEventListener('keydown',handleKeyDown); window.addEventListener('keyup',handleKeyUp); window.addEventListener('mousemove',handleMouseMove);
-        initThree(); lastTimestamp=performance.now(); gameLoop();
+        window.addEventListener('keydown',handleKeyDown); 
+        window.addEventListener('keyup',handleKeyUp); 
+        window.addEventListener('mousemove',handleMouseMove);
+        initThree(); 
+        lastTimestamp=performance.now(); 
+        gameLoop();
     </script>
 </body>
 </html>
