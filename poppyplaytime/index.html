@@ -58,7 +58,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        // ---- Глобальные переменные (аналогично исходнику, добавляем оружие) ----
+        // ---- Глобальные переменные ----
         let socket, playerId, players = {}, items = [], monsterState, gameState = 'waiting', myPlayer = null;
         let isGameActive = false, isPlayerReady = false, localItems = 0, localAmmo = 0, hasGun = false;
         let playerName = "Выживший";
@@ -66,6 +66,7 @@
         let keys = { w: false, s: false, a: false, d: false }, mouseX = 0, mouseY = 0, playerRotationY = 0, playerPosition = { x: 0, z: 0 };
         const MAP_SIZE = 40, PLAYER_SPEED = 5.0;
         let lastTimestamp = 0, nearestItemId = null, nearestWeapon = false;
+        let weapon = null; // будет заполнено из сервера
         
         // DOM элементы
         const lobbyScreen = document.getElementById('lobbyScreen');
@@ -91,7 +92,7 @@
         function showScreenFlash() { const f=document.createElement('div'); f.className='screen-flash'; document.body.appendChild(f); setTimeout(()=>f.remove(),300); }
         function updateUI() {
             if(gameState==='waiting') { gameStatusText.innerHTML='Статус: 🟡 ОЖИДАНИЕ'; readyBtn.style.display='block'; readyBtn.textContent=isPlayerReady?'✅ ГОТОВ':'❌ НЕ ГОТОВ'; readyBtn.style.background=isPlayerReady?'#2ecc71':'rgba(0,0,0,0.7)'; monsterStatus.textContent='👾 Прототип: Ожидает...'; }
-            else if(gameState==='playing') { gameStatusText.innerHTML='Статус: 🔴 ОХОТА'; readyBtn.style.display='none'; itemsText.innerHTML=`🔑 Ключи: ${localItems}/3`; monsterStatus.innerHTML=monsterState.state==='chase'?'👾 Прототип: 🔴 ПРЕСЛЕДУЕТ! 🔴':(monsterState.state==='stunned'?'👾 Прототип: 😵 ОГЛУШЕН!':'👾 Прототип: Ищет...'); }
+            else if(gameState==='playing') { gameStatusText.innerHTML='Статус: 🔴 ОХОТА'; readyBtn.style.display='none'; itemsText.innerHTML=`🔑 Ключи: ${localItems}/3`; monsterStatus.innerHTML=monsterState && monsterState.state==='chase'?'👾 Прототип: 🔴 ПРЕСЛЕДУЕТ! 🔴':(monsterState && monsterState.state==='stunned'?'👾 Прототип: 😵 ОГЛУШЕН!':'👾 Прототип: Ищет...'); }
             else { gameStatusText.innerHTML='Статус: ⚫ КОНЕЦ'; readyBtn.style.display='none'; }
             weaponHud.style.display = hasGun ? 'flex' : 'none';
             if(hasGun) ammoCountSpan.innerText = localAmmo;
@@ -111,23 +112,39 @@
         }
         function addChatMessage(sender,msg,system=false){ const d=document.createElement('div'); d.className='chat-message'; d.innerHTML=system?`<span style="color:#ffaa00;">🔔 ${msg}</span>`:`<span class="sender">${sender}:</span> <span>${msg}</span>`; chatMessagesDiv.appendChild(d); chatMessagesDiv.scrollTop=chatMessagesDiv.scrollHeight; if(chatMessagesDiv.children.length>100) chatMessagesDiv.removeChild(chatMessagesDiv.firstChild); }
         
-        // --- 3D модели (аналогично оригиналу, добавим модель оружия) ---
+        // --- 3D модели ---
         function createWeaponModel(x,z){
             const group=new THREE.Group();
-            const bodyGeo=new THREE.BoxGeometry(0.4,0.2,0.8);
             const mat=new THREE.MeshStandardMaterial({color:0x333333,metalness:0.7,roughness:0.3});
-            const body=new THREE.Mesh(bodyGeo,mat); body.position.set(0,0,0); group.add(body);
-            const barrelGeo=new THREE.CylinderGeometry(0.1,0.1,0.6,8); const barrel=new THREE.Mesh(barrelGeo,mat); barrel.position.set(0,0.05,0.35); barrel.rotation.x=Math.PI/2; group.add(barrel);
-            const gripGeo=new THREE.BoxGeometry(0.35,0.4,0.2); const grip=new THREE.Mesh(gripGeo,mat); grip.position.set(0,-0.2,-0.2); group.add(grip);
+            const body=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.2,0.8),mat); body.position.set(0,0,0); group.add(body);
+            const barrel=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,0.6,8),mat); barrel.position.set(0,0.05,0.35); barrel.rotation.x=Math.PI/2; group.add(barrel);
+            const grip=new THREE.Mesh(new THREE.BoxGeometry(0.35,0.4,0.2),mat); grip.position.set(0,-0.2,-0.2); group.add(grip);
             group.position.set(x,0.2,z); group.castShadow=true; return group;
         }
-        function createPlayerModel(x,z){ /* как в оригинале, но можно упрощённо */ const g=new THREE.Group(); const b=new THREE.Mesh(new THREE.BoxGeometry(0.8,1.2,0.8),new THREE.MeshStandardMaterial({color:0xff6666})); b.position.y=0.6; g.add(b); const h=new THREE.Mesh(new THREE.SphereGeometry(0.5),new THREE.MeshStandardMaterial({color:0xff8888})); h.position.y=1.2; g.add(h); g.position.set(x,0,z); return g; }
+        function createPlayerModel(x,z){ const g=new THREE.Group(); const b=new THREE.Mesh(new THREE.BoxGeometry(0.8,1.2,0.8),new THREE.MeshStandardMaterial({color:0xff6666})); b.position.y=0.6; g.add(b); const h=new THREE.Mesh(new THREE.SphereGeometry(0.5),new THREE.MeshStandardMaterial({color:0xff8888})); h.position.y=1.2; g.add(h); g.position.set(x,0,z); return g; }
         function createMonsterModel(){ const g=new THREE.Group(); const body=new THREE.Mesh(new THREE.CylinderGeometry(0.7,0.9,1.8),new THREE.MeshStandardMaterial({color:0x331111})); body.position.y=0.9; g.add(body); const head=new THREE.Mesh(new THREE.SphereGeometry(0.55),new THREE.MeshStandardMaterial({color:0x441111,emissive:0x220000})); head.position.y=1.85; g.add(head); const eyeL=new THREE.Mesh(new THREE.SphereGeometry(0.14),new THREE.MeshStandardMaterial({color:0xff0000,emissive:0x440000})); eyeL.position.set(-0.2,1.95,0.55); g.add(eyeL); const eyeR=eyeL.clone(); eyeR.position.set(0.2,1.95,0.55); g.add(eyeR); return g; }
         function createItemModel(x,z){ const g=new THREE.Group(); const box=new THREE.Mesh(new THREE.BoxGeometry(0.6,0.6,0.6),new THREE.MeshStandardMaterial({color:0xffaa33,emissive:0x442200})); g.add(box); g.position.set(x,0.3,z); return g; }
         
-        function updateItemModels(){ itemMeshes.forEach(m=>scene.remove(m)); itemMeshes=[]; items.forEach(i=>{ if(!i.collected){ const m=createItemModel(i.position.x,i.position.z); scene.add(m); itemMeshes.push(m); } }); }
-        function updateWeaponModel(){ if(weaponMesh) scene.remove(weaponMesh); if(weapon && weapon.exists && !weapon.collectedBy){ weaponMesh=createWeaponModel(weapon.position.x,weapon.position.z); scene.add(weaponMesh); } else weaponMesh=null; }
-        function updateMonsterModel(){ if(!monsterMesh) monsterMesh=createMonsterModel(), scene.add(monsterMesh); if(monsterState) monsterMesh.position.set(monsterState.position.x,0,monsterState.position.z); if(monsterState.state==='stunned') monsterMesh.material.emissiveIntensity=0.8; else monsterMesh.material.emissiveIntensity=0; }
+        function updateItemModels(){ 
+            if(!items) return;
+            itemMeshes.forEach(m=>scene.remove(m)); 
+            itemMeshes=[]; 
+            items.forEach(i=>{ if(!i.collected){ const m=createItemModel(i.position.x,i.position.z); scene.add(m); itemMeshes.push(m); } }); 
+        }
+        function updateWeaponModel(){ 
+            if(!weapon) return;
+            if(weaponMesh) scene.remove(weaponMesh); 
+            if(weapon.exists && !weapon.collectedBy){ weaponMesh=createWeaponModel(weapon.position.x,weapon.position.z); scene.add(weaponMesh); } 
+            else weaponMesh=null; 
+        }
+        function updateMonsterModel(){ 
+            if(!monsterMesh){ monsterMesh=createMonsterModel(); scene.add(monsterMesh); } 
+            if(monsterState && monsterState.position){ 
+                monsterMesh.position.set(monsterState.position.x,0,monsterState.position.z); 
+                if(monsterState.state==='stunned') monsterMesh.children.forEach(c=>{ if(c.material) c.material.emissiveIntensity=0.8; });
+                else monsterMesh.children.forEach(c=>{ if(c.material) c.material.emissiveIntensity=0; });
+            } 
+        }
         
         // --- Сокет обработчики ---
         function setupSocket(){
@@ -169,7 +186,7 @@
             // Подсказки
             nearestItemId=null; nearestWeapon=false;
             if(gameState==='playing'){
-                let closestDist=3; items.forEach(it=>{ if(!it.collected){ const d=Math.hypot(playerPosition.x-it.position.x,playerPosition.z-it.position.z); if(d<closestDist){ closestDist=d; nearestItemId=it.id; } } });
+                let closestDist=3; if(items) items.forEach(it=>{ if(!it.collected){ const d=Math.hypot(playerPosition.x-it.position.x,playerPosition.z-it.position.z); if(d<closestDist){ closestDist=d; nearestItemId=it.id; } } });
                 pickupPrompt.style.display=nearestItemId!==null?'flex':'none';
                 if(weapon && weapon.exists && !weapon.collectedBy && Math.hypot(playerPosition.x-weapon.position.x,playerPosition.z-weapon.position.z)<2.0){ nearestWeapon=true; gunPrompt.style.display='flex'; } else gunPrompt.style.display='none';
             } else { pickupPrompt.style.display='none'; gunPrompt.style.display='none'; }
@@ -192,17 +209,35 @@
             if(isGameActive) updateMovement(delta);
             itemMeshes.forEach((m,i)=>{ if(m){ m.rotation.y+=0.02; m.position.y=0.3+Math.sin(Date.now()*0.005+i)*0.1; } });
             if(weaponMesh) weaponMesh.rotation.y+=0.03;
-            updateMonsterModel();
+            if(monsterState) updateMonsterModel();
             for(let id in players) if(id!==playerId && players[id]) updatePlayerModel(id);
             renderer.render(scene,camera);
             requestAnimationFrame(gameLoop);
         }
         function updatePlayerModel(id){ const p=players[id]; if(!p) return; let m=playerMeshes[id]; if(!m){ m=createPlayerModel(p.position.x,p.position.z); scene.add(m); playerMeshes[id]=m; } m.position.set(p.position.x,0,p.position.z); m.rotation.y=p.rotation||0; }
         
-        joinBtn.onclick=()=>{ const name=playerNameInput.value.trim(); if(name) playerName=name; socket=io(); setupSocket(); socket.on('connect',()=>{ socket.emit('change_name',playerName); isGameActive=true; lobbyScreen.style.display='none'; }); };
-        readyBtn.onclick=()=>{ if(gameState==='waiting'){ isPlayerReady=!isPlayerReady; socket.emit('player_ready',isPlayerReady); updateUI(); } };
-        chatSendBtn.onclick=()=>{ const msg=chatInput.value.trim(); if(msg) socket.emit('chat_message',msg), chatInput.value=''; };
-        chatInput.onkeypress=e=>{ if(e.key==='Enter') chatSendBtn.click(); };
+        // --- Обработчик кнопки "ВОЙТИ" с защитой от undefined ---
+        joinBtn.onclick = () => {
+            const name = playerNameInput.value.trim();
+            if(name) playerName = name;
+            socket = io();
+            socket.on('connect', () => {
+                console.log('Подключено к серверу');
+                socket.emit('change_name', playerName);
+                isGameActive = true;
+                lobbyScreen.style.display = 'none';
+                showNotification('Подключено! Ждите начала игры...', false);
+                setupSocket(); // все остальные обработчики
+            });
+            socket.on('connect_error', (err) => {
+                console.error('Ошибка подключения:', err);
+                showNotification('Не удалось подключиться к серверу! Проверьте, запущен ли сервер.', true);
+            });
+        };
+        
+        readyBtn.onclick = () => { if(gameState==='waiting' && socket){ isPlayerReady=!isPlayerReady; socket.emit('player_ready',isPlayerReady); updateUI(); } };
+        chatSendBtn.onclick = () => { const msg=chatInput.value.trim(); if(msg && socket) socket.emit('chat_message',msg), chatInput.value=''; };
+        chatInput.onkeypress = e => { if(e.key==='Enter') chatSendBtn.click(); };
         window.addEventListener('keydown',handleKeyDown); window.addEventListener('keyup',handleKeyUp); window.addEventListener('mousemove',handleMouseMove);
         initThree(); lastTimestamp=performance.now(); gameLoop();
     </script>
