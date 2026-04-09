@@ -184,4 +184,4 @@ async def on_ready():
     print(f"Синхронизировано {len(synced)} команд.")
 
 if __name__ == "__main__":
-    bot.run("MTQ5MTUwODMwMDI3NjMwNjEzNA.GbR_43.cA-8elWpSXtoHyJVj7RTLyBQLM6fFr2o-7eO-w")
+    bot.run(BOT_TOKEN)
