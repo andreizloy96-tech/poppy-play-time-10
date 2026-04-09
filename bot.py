@@ -180,6 +180,4 @@ async def on_ready():
     print(f"Синхронизировано {len(synced)} команд.")
 
 if __name__ == "__main__":
-    from keep_alive import keep_alive
-    keep_alive() # Запускаем веб-сервер
-    bot.run(os.getenv("MTQ5MTUwODMwMDI3NjMwNjEzNA.GbR_43.cA-8elWpSXtoHyJVj7RTLyBQLM6fFr2o-7eO-w"))
+    bot.run("MTQ5MTUwODMwMDI3NjMwNjEzNA.GbR_43.cA-8elWpSXtoHyJVj7RTLyBQLM6fFr2o-7eO-w")
