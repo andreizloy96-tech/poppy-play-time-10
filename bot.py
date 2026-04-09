@@ -7,6 +7,10 @@ import random
 from datetime import datetime
 import os
 
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+if not BOT_TOKEN:
+    raise ValueError("❌ Нет BOT_TOKEN в переменных окружения!")
+
 cred = credentials.Certificate("serviceAccountKey.json")
 firebase_admin.initialize_app(cred, {
     'databaseURL': 'https://nexusclicker-11c93-default-rtdb.firebaseio.com'
