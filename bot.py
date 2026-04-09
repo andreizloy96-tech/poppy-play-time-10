@@ -39,9 +39,9 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ⚠️ ЗАМЕНИТЕ НА ВАШИ ДАННЫЕ (ID канала и сервера)
-ALLOWED_CHANNEL_ID = 1491484853143867472   # ID канала, где работают команды
-GUILD_ID = 123456789012345678              # ID вашего Discord-сервера
-ADMIN_IDS = [123456789012345678]           # Ваш Discord ID (администратор)
+ALLOWED_CHANNEL_ID = 1491811274097430538   # ID канала, где работают команды
+GUILD_ID = 1194999947955814452              # ID вашего Discord-сервера
+ADMIN_IDS = [1187805883149865053]           # Ваш Discord ID (администратор)
 
 # ---------- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ----------
 def get_player_key(user_id: int) -> str:
@@ -239,4 +239,4 @@ async def on_ready():
         print(f"Ошибка синхронизации: {e}")
 
 if __name__ == "__main__":
-    bot.run(BOT_TOKEN)
+    bot.run("BOT_TOKEN")
