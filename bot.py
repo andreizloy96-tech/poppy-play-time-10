@@ -239,4 +239,4 @@ async def on_ready():
         print(f"Ошибка синхронизации: {e}")
 
 if __name__ == "__main__":
-    bot.run(MTQ5MTUwODMwMDI3NjMwNjEzNA.GbR_43.cA-8elWpSXtoHyJVj7RTLyBQLM6fFr2o-7eO-w)
+    bot.run(MTQ5MTUwODMwMDI3NjMwNjEzNA.GfV08j.cLVM-LQWm749pcJTiXmXP1MuRhnTzWYTz1wZis)
